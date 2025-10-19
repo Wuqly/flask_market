@@ -1,0 +1,13 @@
+services:
+
+  db:
+    image: postgres
+    restart: always
+    environment:
+      POSTGRES_PASSWORD: example
+
+  web:
+    build: ./web
+    restart: always
+    ports:
+      - "80:80"
