@@ -1,187 +1,170 @@
-from typing import Optional
+# app/web/models.py
+from flask_sqlalchemy import SQLAlchemy
+from werkzeug.security import generate_password_hash, check_password_hash
 import datetime
 import decimal
 
-from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKeyConstraint, Identity, Index, Integer, Numeric, PrimaryKeyConstraint, String, Text, UniqueConstraint, text
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+db = SQLAlchemy()
 
-class Base(DeclarativeBase):
-    pass
+# =========================
+# Роли
+# =========================
+class Roles(db.Model):
+    __tablename__ = "roles"
 
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String, nullable=False)
 
-class Characteristics(Base):
-    __tablename__ = 'characteristics'
-    __table_args__ = (
-        PrimaryKeyConstraint('id', name='characteristics_pkey'),
-    )
-
-    id: Mapped[int] = mapped_column(Integer, Identity(always=True, start=1, increment=1, minvalue=1, maxvalue=2147483647, cycle=False, cache=1), primary_key=True)
-    name: Mapped[str] = mapped_column(String, nullable=False)
-
-    product_characteristics: Mapped[list['ProductCharacteristics']] = relationship('ProductCharacteristics', back_populates='characteristic')
+    users = db.relationship("Users", back_populates="role")
 
 
-class OrderStatuses(Base):
-    __tablename__ = 'order_statuses'
-    __table_args__ = (
-        PrimaryKeyConstraint('id', name='order_statuses_pkey'),
-        UniqueConstraint('name', name='unique_order_status_name')
-    )
+# =========================
+# Пользователи
+# =========================
+class Users(db.Model):
+    __tablename__ = "users"
 
-    id: Mapped[int] = mapped_column(Integer, Identity(always=True, start=1, increment=1, minvalue=1, maxvalue=2147483647, cycle=False, cache=1), primary_key=True)
-    name: Mapped[str] = mapped_column(String, nullable=False)
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String, nullable=False)
+    email = db.Column(db.String, nullable=False, unique=True)
+    password_hash = db.Column(db.String, nullable=False)
+    role_id = db.Column(db.Integer, db.ForeignKey("roles.id", ondelete="CASCADE"), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
 
-    orders: Mapped[list['Orders']] = relationship('Orders', back_populates='status')
+    role = db.relationship("Roles", back_populates="users")
+    carts = db.relationship("Carts", back_populates="user")
+    favorites = db.relationship("Favorites", back_populates="user")
+    orders = db.relationship("Orders", back_populates="user")
 
+    def set_password(self, password):
+        self.password_hash = generate_password_hash(password)
 
-class Products(Base):
-    __tablename__ = 'products'
-    __table_args__ = (
-        CheckConstraint('price >= 0::numeric', name='products_price_check'),
-        CheckConstraint('stock >= 0', name='products_stock_check'),
-        PrimaryKeyConstraint('id', name='products_pkey'),
-        Index('idx_products_name', 'name')
-    )
-
-    id: Mapped[int] = mapped_column(Integer, Identity(always=True, start=1, increment=1, minvalue=1, maxvalue=2147483647, cycle=False, cache=1), primary_key=True)
-    name: Mapped[str] = mapped_column(String, nullable=False)
-    price: Mapped[decimal.Decimal] = mapped_column(Numeric(10, 2), nullable=False)
-    stock: Mapped[int] = mapped_column(Integer, nullable=False)
-    created_at: Mapped[datetime.datetime] = mapped_column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP'))
-    updated_at: Mapped[datetime.datetime] = mapped_column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP'))
-    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text('true'))
-    description: Mapped[Optional[str]] = mapped_column(Text)
-    image_url: Mapped[Optional[str]] = mapped_column(String)
-
-    product_characteristics: Mapped[list['ProductCharacteristics']] = relationship('ProductCharacteristics', back_populates='product')
-    favorites: Mapped[list['Favorites']] = relationship('Favorites', back_populates='product')
-    cart_items: Mapped[list['CartItems']] = relationship('CartItems', back_populates='product')
+    def check_password(self, password):
+        return check_password_hash(self.password_hash, password)
 
 
-class Roles(Base):
-    __tablename__ = 'roles'
-    __table_args__ = (
-        PrimaryKeyConstraint('id', name='roles_pkey'),
-    )
+# =========================
+# Продукты
+# =========================
+class Products(db.Model):
+    __tablename__ = "products"
 
-    id: Mapped[int] = mapped_column(Integer, Identity(always=True, start=1, increment=1, minvalue=1, maxvalue=2147483647, cycle=False, cache=1), primary_key=True)
-    name: Mapped[str] = mapped_column(String, nullable=False)
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String, nullable=False, index=True)
+    price = db.Column(db.Numeric(10,2), nullable=False)
+    stock = db.Column(db.Integer, nullable=False)
+    description = db.Column(db.Text)
+    image_url = db.Column(db.String)
+    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+    is_active = db.Column(db.Boolean, default=True)
 
-    users: Mapped[list['Users']] = relationship('Users', back_populates='role')
-
-
-class ProductCharacteristics(Base):
-    __tablename__ = 'product_characteristics'
-    __table_args__ = (
-        ForeignKeyConstraint(['characteristic_id'], ['characteristics.id'], ondelete='CASCADE', name='fk_characteristic'),
-        ForeignKeyConstraint(['product_id'], ['products.id'], ondelete='CASCADE', name='fk_product'),
-        PrimaryKeyConstraint('id', name='product_characteristics_pkey')
-    )
-
-    id: Mapped[int] = mapped_column(Integer, Identity(always=True, start=1, increment=1, minvalue=1, maxvalue=2147483647, cycle=False, cache=1), primary_key=True)
-    product_id: Mapped[int] = mapped_column(Integer, nullable=False)
-    characteristic_id: Mapped[int] = mapped_column(Integer, nullable=False)
-    value: Mapped[str] = mapped_column(String, nullable=False)
-
-    characteristic: Mapped['Characteristics'] = relationship('Characteristics', back_populates='product_characteristics')
-    product: Mapped['Products'] = relationship('Products', back_populates='product_characteristics')
+    product_characteristics = db.relationship("ProductCharacteristics", back_populates="product")
+    favorites = db.relationship("Favorites", back_populates="product")
+    cart_items = db.relationship("CartItems", back_populates="product")
 
 
-class Users(Base):
-    __tablename__ = 'users'
-    __table_args__ = (
-        ForeignKeyConstraint(['role_id'], ['roles.id'], ondelete='CASCADE', name='fk_user_role'),
-        PrimaryKeyConstraint('id', name='users_pkey'),
-        UniqueConstraint('email', name='users_email_key'),
-        Index('idx_users_email', 'email')
-    )
+# =========================
+# Характеристики
+# =========================
+class Characteristics(db.Model):
+    __tablename__ = "characteristics"
 
-    id: Mapped[int] = mapped_column(Integer, Identity(always=True, start=1, increment=1, minvalue=1, maxvalue=2147483647, cycle=False, cache=1), primary_key=True)
-    username: Mapped[str] = mapped_column(String, nullable=False)
-    email: Mapped[str] = mapped_column(String, nullable=False)
-    password_hash: Mapped[str] = mapped_column(String, nullable=False)
-    role_id: Mapped[int] = mapped_column(Integer, nullable=False)
-    created_at: Mapped[datetime.datetime] = mapped_column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP'))
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String, nullable=False)
 
-    role: Mapped['Roles'] = relationship('Roles', back_populates='users')
-    carts: Mapped[list['Carts']] = relationship('Carts', back_populates='user')
-    favorites: Mapped[list['Favorites']] = relationship('Favorites', back_populates='user')
-    orders: Mapped[list['Orders']] = relationship('Orders', back_populates='user')
+    product_characteristics = db.relationship("ProductCharacteristics", back_populates="characteristic")
 
 
-class Carts(Base):
-    __tablename__ = 'carts'
-    __table_args__ = (
-        ForeignKeyConstraint(['user_id'], ['users.id'], ondelete='CASCADE', name='fk_user_cart'),
-        PrimaryKeyConstraint('id', name='carts_pkey')
-    )
+# =========================
+# Связь Продукт-Характеристика
+# =========================
+class ProductCharacteristics(db.Model):
+    __tablename__ = "product_characteristics"
 
-    id: Mapped[int] = mapped_column(Integer, Identity(always=True, start=1, increment=1, minvalue=1, maxvalue=2147483647, cycle=False, cache=1), primary_key=True)
-    user_id: Mapped[int] = mapped_column(Integer, nullable=False)
-    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text('true'))
-    created_at: Mapped[datetime.datetime] = mapped_column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP'))
-    updated_at: Mapped[datetime.datetime] = mapped_column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP'))
+    id = db.Column(db.Integer, primary_key=True)
+    product_id = db.Column(db.Integer, db.ForeignKey("products.id", ondelete="CASCADE"), nullable=False)
+    characteristic_id = db.Column(db.Integer, db.ForeignKey("characteristics.id", ondelete="CASCADE"), nullable=False)
+    value = db.Column(db.String, nullable=False)
 
-    user: Mapped['Users'] = relationship('Users', back_populates='carts')
-    cart_items: Mapped[list['CartItems']] = relationship('CartItems', back_populates='cart')
-    orders: Mapped[list['Orders']] = relationship('Orders', back_populates='cart')
+    product = db.relationship("Products", back_populates="product_characteristics")
+    characteristic = db.relationship("Characteristics", back_populates="product_characteristics")
 
 
-class Favorites(Base):
-    __tablename__ = 'favorites'
-    __table_args__ = (
-        ForeignKeyConstraint(['product_id'], ['products.id'], ondelete='CASCADE', name='fk_product_fav'),
-        ForeignKeyConstraint(['user_id'], ['users.id'], ondelete='CASCADE', name='fk_user_fav'),
-        PrimaryKeyConstraint('id', name='favorites_pkey'),
-        UniqueConstraint('user_id', 'product_id', name='unique_user_product_fav')
-    )
+# =========================
+# Корзины
+# =========================
+class Carts(db.Model):
+    __tablename__ = "carts"
 
-    id: Mapped[int] = mapped_column(Integer, Identity(always=True, start=1, increment=1, minvalue=1, maxvalue=2147483647, cycle=False, cache=1), primary_key=True)
-    user_id: Mapped[int] = mapped_column(Integer, nullable=False)
-    product_id: Mapped[int] = mapped_column(Integer, nullable=False)
-    added_at: Mapped[datetime.datetime] = mapped_column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP'))
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    is_active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
 
-    product: Mapped['Products'] = relationship('Products', back_populates='favorites')
-    user: Mapped['Users'] = relationship('Users', back_populates='favorites')
-
-
-class CartItems(Base):
-    __tablename__ = 'cart_items'
-    __table_args__ = (
-        CheckConstraint('quantity > 0', name='cart_items_quantity_check'),
-        ForeignKeyConstraint(['cart_id'], ['carts.id'], ondelete='CASCADE', name='fk_cart'),
-        ForeignKeyConstraint(['product_id'], ['products.id'], ondelete='CASCADE', name='fk_product_cart_item'),
-        PrimaryKeyConstraint('id', name='cart_items_pkey')
-    )
-
-    id: Mapped[int] = mapped_column(Integer, Identity(always=True, start=1, increment=1, minvalue=1, maxvalue=2147483647, cycle=False, cache=1), primary_key=True)
-    cart_id: Mapped[int] = mapped_column(Integer, nullable=False)
-    product_id: Mapped[int] = mapped_column(Integer, nullable=False)
-    quantity: Mapped[int] = mapped_column(Integer, nullable=False)
-    added_at: Mapped[datetime.datetime] = mapped_column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP'))
-
-    cart: Mapped['Carts'] = relationship('Carts', back_populates='cart_items')
-    product: Mapped['Products'] = relationship('Products', back_populates='cart_items')
+    user = db.relationship("Users", back_populates="carts")
+    cart_items = db.relationship("CartItems", back_populates="cart")
+    orders = db.relationship("Orders", back_populates="cart")
 
 
-class Orders(Base):
-    __tablename__ = 'orders'
-    __table_args__ = (
-        CheckConstraint('total_amount >= 0::numeric', name='orders_total_amount_check'),
-        ForeignKeyConstraint(['cart_id'], ['carts.id'], ondelete='CASCADE', name='fk_cart_order'),
-        ForeignKeyConstraint(['status_id'], ['order_statuses.id'], name='fk_status_order'),
-        ForeignKeyConstraint(['user_id'], ['users.id'], ondelete='CASCADE', name='fk_user_order'),
-        PrimaryKeyConstraint('id', name='orders_pkey')
-    )
+# =========================
+# Элементы корзины
+# =========================
+class CartItems(db.Model):
+    __tablename__ = "cart_items"
 
-    id: Mapped[int] = mapped_column(Integer, Identity(always=True, start=1, increment=1, minvalue=1, maxvalue=2147483647, cycle=False, cache=1), primary_key=True)
-    user_id: Mapped[int] = mapped_column(Integer, nullable=False)
-    cart_id: Mapped[int] = mapped_column(Integer, nullable=False)
-    status_id: Mapped[int] = mapped_column(Integer, nullable=False)
-    total_amount: Mapped[decimal.Decimal] = mapped_column(Numeric(10, 2), nullable=False)
-    created_at: Mapped[datetime.datetime] = mapped_column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP'))
-    updated_at: Mapped[datetime.datetime] = mapped_column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP'))
+    id = db.Column(db.Integer, primary_key=True)
+    cart_id = db.Column(db.Integer, db.ForeignKey("carts.id", ondelete="CASCADE"), nullable=False)
+    product_id = db.Column(db.Integer, db.ForeignKey("products.id", ondelete="CASCADE"), nullable=False)
+    quantity = db.Column(db.Integer, nullable=False)
+    added_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
 
-    cart: Mapped['Carts'] = relationship('Carts', back_populates='orders')
-    status: Mapped['OrderStatuses'] = relationship('OrderStatuses', back_populates='orders')
-    user: Mapped['Users'] = relationship('Users', back_populates='orders')
+    cart = db.relationship("Carts", back_populates="cart_items")
+    product = db.relationship("Products", back_populates="cart_items")
+
+
+# =========================
+# Избранное
+# =========================
+class Favorites(db.Model):
+    __tablename__ = "favorites"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    product_id = db.Column(db.Integer, db.ForeignKey("products.id", ondelete="CASCADE"), nullable=False)
+    added_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+
+    user = db.relationship("Users", back_populates="favorites")
+    product = db.relationship("Products", back_populates="favorites")
+
+
+# =========================
+# Статусы заказов
+# =========================
+class OrderStatuses(db.Model):
+    __tablename__ = "order_statuses"
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String, nullable=False, unique=True)
+
+    orders = db.relationship("Orders", back_populates="status")
+
+
+# =========================
+# Заказы
+# =========================
+class Orders(db.Model):
+    __tablename__ = "orders"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    cart_id = db.Column(db.Integer, db.ForeignKey("carts.id", ondelete="CASCADE"), nullable=False)
+    status_id = db.Column(db.Integer, db.ForeignKey("order_statuses.id"), nullable=False)
+    total_amount = db.Column(db.Numeric(10,2), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+
+    user = db.relationship("Users", back_populates="orders")
+    cart = db.relationship("Carts", back_populates="orders")
+    status = db.relationship("OrderStatuses", back_populates="orders")
